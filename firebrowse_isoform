@@ -21,6 +21,7 @@ library(scales)
 
 #check all the libraries above are activated
 
+#to unzip
 library(utils)
 
 #This unzips the normalised RNAseq isoform file from firebrowse  
