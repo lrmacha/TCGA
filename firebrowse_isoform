@@ -1,0 +1,245 @@
+#These are the libraries that need installing (below). You will need to install them from the packages tab
+
+#tcgabiolinks need code below directly into the console to install 
+if (!require("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+
+BiocManager::install("TCGAbiolinks")
+
+
+library(SummarizedExperiment)
+library("maxstat")
+library("survival")
+library(readxl)
+library(TCGAbiolinks)
+library("writexl")
+library(tidyverse)
+library(survminer)
+library(dplyr)
+library(ggplot2)
+library(scales)
+
+#check all the libraries above are activated
+
+library(utils)
+
+#This unzips the normalised RNAseq isoform file from firebrowse  
+untar("C:/Users/lrmacha/Downloads/gdac.broadinstitute.org_SARC.Merge_rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_isoforms_normalized__data.Level_3.2016012800.0.0.tar.gz")
+
+#import unzipped tar file and tick header box and name df
+
+
+df <- df %>%
+  filter(Hybridization.REF %in% c("uc001esp.2","uc004dcy.1","uc004dda.1","uc004dcz.2","uc004ddb.1","uc004dcw.2","uc004dcx.2","uc004dct.1","uc004dcu.1","uc004dcv.1","uc004dcr.1","uc004dcs.1","uc004dcq.1","uc004dcm.1","uc004dcn.1","uc004dco.1","uc004dcp.1","uc011mkb.1","uc004ddd.1","uc010ngp.1","uc010ngr.1"))
+
+
+df = t(df)
+df  = as.data.frame(df)
+
+# Assign the first row as column headers
+colnames(df) <- as.character(df[1, ])
+# Remove the first row
+df <- df[-1, ]
+
+df = rownames_to_column(df)
+colnames(df)[1] <- "submitter_id"
+
+
+df$submitter_id <- substr(df$submitter_id , 1, 12)  # Take only the first 12 characters
+df$submitter_id <- gsub("\\.", "-", df$submitter_id)  # Replace dots with hyphens
+
+
+
+########################getting clinical data (change cancer!!!!!)
+
+clinical <- GDCquery_clinic(project = "TCGA-SARC", 
+                            type = "clinical")
+
+
+bind2 <- inner_join(clinical, df, by = "submitter_id") # this has all isoforms and clinical data
+
+####gene expresssion of isoforms for Graphpad 
+genedata = c("uc004dcy.1","uc004dda.1","uc004dcz.2","uc004ddb.1","uc004dcw.2","uc004dcx.2","uc004dct.1","uc004dcu.1","uc004dcv.1","uc004dcr.1","uc004dcs.1","uc004dcq.1","uc004dcm.1","uc004dcn.1","uc004dco.1","uc004dcp.1","uc011mkb.1","uc004ddd.1","uc010ngp.1","uc010ngr.1") 
+expression_df <- bind2[genedata]
+#write_xlsx(expression_df, "c:/TCGA/isogeneexpression.xlsx")
+
+for (col in names(expression_df)) {
+  expression_df[[col]] <- as.numeric(expression_df[[col]])
+}
+
+
+boxplot(expression_df)
+
+df_long <- expression_df %>%
+  pivot_longer(cols = everything(), names_to = "Group", values_to = "Value")
+
+
+#adding 1 to all values before plotting on log2 scale
+df_long$Value <- df_long$Value + 1
+
+medians <- df_long %>%
+  group_by(Group) %>%
+  summarize(Median = median(Value))
+
+
+
+# Create the horizontal violin plot
+ggplot(df_long, aes(x = Group, y = Value)) +
+  geom_violin(fill = "lightblue", color = "black") +
+  geom_hline(aes(yintercept = median(Value)), size = 2, color = "red") +
+  scale_y_continuous(trans='log2')+
+  geom_point(position = position_jitter(width = 0.02), color = "black") +
+  coord_flip() +
+  labs(title = "Horizontal Violin Plot") +
+  theme_minimal()
+
+
+
+
+
+# Specify the columns to include in the new dataframe including the specofic isoform (i.e. uc004dcm.1)
+selected_columns <- c("submitter_id", "days_to_death", "days_to_last_follow_up", "vital_status", "uc004dcm.1")
+
+# Create a new dataframe with the specified columns
+new_df <- bind2[selected_columns]
+cmb1 = new_df
+
+MGE = cmb1$uc004dcm.1 ###########needs changing for each isoform
+timedeath = cmb1$days_to_death
+timelast = cmb1$days_to_last_follow_up
+cens = cmb1$vital_status
+patient = cmb1$submitter_id
+
+#binding columns
+forcutpoint = cbind(patient, MGE, timedeath, timelast, cens)
+cutpointdf = as.data.frame(forcutpoint)
+#optional
+#write_xlsx(cutpointdf, "c:/TCGA/cutpointdf.xlsx")
+
+
+surv = as.data.frame(coalesce(cutpointdf$timedeath,cutpointdf$timelast))
+cutpointdf3 = cbind(surv,cutpointdf)
+
+#renamed column to time
+names(cutpointdf3)[names(cutpointdf3)=="coalesce(cutpointdf$timedeath, cutpointdf$timelast)"] = "time"
+
+#converting characters to numerics
+cutpointdf3$time <- as.numeric(as.character(cutpointdf3$time))  # Convert time variable to numeric
+cutpointdf3$MGE <- as.numeric(as.character(cutpointdf3$MGE))  # Convert MGE to numeric
+cutpointdf3$timedeath <- as.numeric(as.character(cutpointdf3$timedeath))  # Convert one variable to numeric
+cutpointdf3$timelast <- as.numeric(as.character(cutpointdf3$timelast))  # Convert one variable to numeric
+
+#Recodes dead/alive to 0/1 
+cutpointdf3$cens<-recode(cutpointdf3$cens, 'Alive'=0, 'Dead'=1)
+
+
+
+
+########
+# uc004dcy.1	Dp427p1,	mRNA.
+# uc004dda.1	Dp427m,	mRNA.
+# uc004dcz.2	Dp427p2,	mRNA.
+# uc004ddb.1	Dp427c,	mRNA.
+# uc004dcw.2	Dp260-2,	mRNA.
+# uc004dcx.2	Dp260-1,	mRNA.
+# uc004dct.1	Dp140,	mRNA.
+# uc004dcu.1	Dp140b,	mRNA.
+# uc004dcv.1	D140ab,	mRNA.
+# uc004dcr.1	Dp140c,	mRNA.
+# uc004dcs.1	Dp140bc,	mRNA.
+# uc004dcq.1	Dp116,	mRNA.
+# uc004dcm.1	Dp71,	mRNA.
+# uc004dcn.1	Dp71a,	mRNA.
+# uc004dco.1	Dp71b,	mRNA.
+# uc004dcp.1	Dp71ab,	mRNA.
+# uc011mkb.1	Dp40,	mRNA.
+# uc004ddd.1		
+# uc010ngp.1		
+# uc010ngr.1		
+##########
+
+
+
+dichot <- maxstat.test(Surv(time, cens) ~ MGE,
+                       data=cutpointdf3, smethod="LogRank",
+                       pmethod="condMC", B = 9999)
+
+print(dichot)
+
+plot(dichot, xlab="mean gene expression")
+
+
+
+###################################################
+### code chunk number 2:produce module for next bit
+###################################################
+mod <- maxstat.test(Surv(time, cens) ~ MGE,
+                    data=cutpointdf3, smethod="LogRank",
+                    pmethod="condMC", B = 9999)
+
+
+
+
+###################################################
+### code chunk number 3: Survival curves
+###################################################
+splitMGE <- rep(1, nrow(cutpointdf3))
+cp4 <- cbind(cutpointdf3, splitMGE)
+cp4$splitMGE[cp4$MGE <= mod$estimate] <- 0
+
+
+###########################
+ggsurvplot(
+  fit = survfit(Surv(time, cens) ~ splitMGE, data = cp4),             # data used to fit survival curves.
+  risk.table = TRUE,       # show risk table.
+  pval = TRUE,             # show p-value of log-rank test.
+  conf.int = TRUE,         # show confidence intervals for 
+  # point estimates of survival curves.
+  #xlim = c(0,8000),         # present narrower X axis, but not affect
+  #survival estimates.
+  xlab = "Survival time in days",   # customize X axis label.
+  break.time.by = 500,     # break X axis in time intervals by 500.
+  ggtheme = theme_light(), # customize plot and risk table with a theme.
+  risk.table.y.text.col = T, # colour risk table text annotations.
+  risk.table.y.text = FALSE, # show bars instead of names in text annotations
+  # in legend of risk table
+  legend.title = "Gene expression",
+  legend.labs = c("Low expression", "High expression")
+)
+
+
+
+
+
+
+
+####super fancy plot
+###########################
+
+#median survival time
+survfit(Surv(time, cens) ~ splitMGE, data = cp4)
+
+#Comparing survival times between groups 
+survdiff(Surv(time, cens) ~ splitMGE, data = cp4)
+
+#calculated p=value
+sd <- survdiff(Surv(time, cens) ~ splitMGE, data = cp4)
+1 - pchisq(sd$chisq, length(sd$n) - 1)
+
+
+#cox regression
+coxph(Surv(time, cens) ~ splitMGE, data = cp4)
+
+#install summary package
+
+#hazard ratio
+coxph(Surv(time, cens) ~ splitMGE, data = cp4) %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+
+
+##### write out cp4 file for graphpad
+write_xlsx(cp4, "c:/TCGA/cp4.xlsx")
+
+
+
+
