@@ -1,0 +1,120 @@
+library(SummarizedExperiment)
+library("maxstat")
+library("survival")
+library(readxl)
+library(TCGAbiolinks)
+library("writexl")
+library(tidyverse)
+library(survminer)
+library(dplyr)
+
+#upload excel file clinical_plus_isoforms
+cmb1 = clinical_plus_isoforms
+
+
+MGE = cmb1$Dp427m #needs changing for each isoform
+timedeath = cmb1$Overall.Survival..Months.
+cens = cmb1$Overall.Survival.Status_recode
+patient = cmb1$Sample.ID
+
+
+#binding columns
+forcutpoint = cbind(patient, MGE, timedeath, cens)
+cutpointdf = as.data.frame(forcutpoint)
+#optional
+#write_xlsx(cutpointdf, "c:/TCGA/cutpointdf.xlsx")
+
+
+cutpointdf3 = cutpointdf
+
+#renamed column to time
+#names(cutpointdf3)[names(cutpointdf3)=="coalesce(cutpointdf$timedeath, cutpointdf$timelast)"] = "time"
+
+#converting characters to numerics
+cutpointdf3$cens <- as.numeric(as.character(cutpointdf3$cens))  # Convert time variable to numeric
+cutpointdf3$MGE <- as.numeric(as.character(cutpointdf3$MGE))  # Convert MGE to numeric
+cutpointdf3$timedeath <- as.numeric(as.character(cutpointdf3$timedeath))  # Convert one variable to numeric
+#cutpointdf3$timelast <- as.numeric(as.character(cutpointdf3$timelast))  # Convert one variable to numeric
+
+#Recodes dead/alive to 0/1 
+#cutpointdf3$cens<-recode(cutpointdf3$cens, 'Alive'=0, 'Dead'=1)
+
+
+dichot <- maxstat.test(Surv(timedeath, cens) ~ MGE,
+                       data=cutpointdf3, smethod="LogRank",
+                       pmethod="condMC", B = 9999)
+
+print(dichot)
+
+plot(dichot, xlab="Gene expression")
+
+
+
+###################################################
+### code chunk number 2:produce module for next bit
+###################################################
+mod <- maxstat.test(Surv(timedeath, cens) ~ MGE,
+                    data=cutpointdf3, smethod="LogRank",
+                    pmethod="condMC", B = 9999)
+
+
+
+
+###################################################
+### code chunk number 3: Survival curves
+###################################################
+Dp427m <- rep(1, nrow(cutpointdf3))
+cp4 <- cbind(cutpointdf3, Dp427m)
+cp4$Dp427m[cp4$MGE <= mod$estimate] <- 0
+
+
+
+cp4$Dp427m = gsub('0','low', cp4$Dp427m)
+cp4$Dp427m = gsub('1','high', cp4$Dp427m)
+
+
+###########################
+ggsurvplot(
+  fit = survfit(Surv(timedeath, cens) ~ Dp427m, data = cp4),             # data used to fit survival curves.
+  risk.table = TRUE,       # show risk table.
+  pval = TRUE,             # show p-value of log-rank test.
+  conf.int = TRUE,         # show confidence intervals for 
+  # point estimates of survival curves.
+  #xlim = c(0,20),         # present narrower X axis, but not affect
+  # survival estimates.
+  xlab = "Survival time in months",   # customize X axis label.
+  #break.time.by = 25,     # break X axis in time intervals by 50.
+  ggtheme = theme_light(), # customize plot and risk table with a theme.
+  risk.table.y.text.col = T, # colour risk table text annotations.
+  risk.table.y.text = FALSE # show bars instead of names in text annotations
+  # in legend of risk table
+)
+
+
+
+####super fancy plot
+###########################
+
+#median survival time
+survfit(Surv(timedeath, cens) ~ Dp427m, data = cp4)
+
+#Comparing survival times between groups 
+survdiff(Surv(timedeath, cens) ~ Dp427m, data = cp4)
+
+#calculated p=value
+sd <- survdiff(Surv(timedeath, cens) ~ Dp427m, data = cp4)
+1 - pchisq(sd$chisq, length(sd$n) - 1)
+
+
+#cox regression
+coxph(Surv(timedeath, cens) ~ Dp427m, data = cp4)
+
+#install summary package
+
+#hazard ratio
+coxph(Surv(timedeath, cens) ~ Dp427m, data = cp4) %>% 
+  gtsummary::tbl_regression(exp = TRUE)
+
+
+##### write out cp4 file for graphpad
+#write_xlsx(cp4, "c:/TCGA/cp4.xlsx")
