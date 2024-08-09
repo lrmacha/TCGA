@@ -1,0 +1,84 @@
+# Load necessary libraries
+library(dplyr)       # For data manipulation
+library(openxlsx)   # For writing Excel files
+library(readxl)     # For reading Excel files
+
+# Step 1: Set the working directory to where the CSV files are located
+setwd("C:/Users/lrmacha/Downloads/log")
+
+# Step 2: List all CSV files in the working directory
+csv_files <- list.files(pattern = "\\.csv$")
+
+# Define a function to process each CSV file from iDEP
+process_file <- function(file_name) {
+  # Read the CSV file into a dataframe
+  df <- read.csv(file_name)
+  
+  # Define required columns for processing
+  required_columns <- c("FDR", "Pathway", "group")
+  
+  # Check if all required columns are present in the dataframe
+  if (all(required_columns %in% colnames(df))) {
+    # Select only the required columns
+    df1 <- df[, required_columns]
+    
+    # Compute -log10(FDR) and add it as a new column
+    df1$`-log10(FDR)` <- -log10(df1$FDR)
+    
+    # Filter rows where the 'group' column contains "Upregulated"
+    df1_upregulated <- df1 %>% filter(grepl("Upregulated", group))
+    
+    # Remove 'group' and 'FDR' columns from the dataframe
+    df2 <- df1_upregulated[, !names(df1_upregulated) %in% c("group", "FDR")]
+    
+    # Create a new file name with the suffix _logFDR.xlsx
+    new_file_name <- sub("\\.csv$", "_logFDR.xlsx", file_name)
+    
+    # Write the processed dataframe to an Excel file
+    write.xlsx(df2, file = new_file_name)
+    
+    # Print a message indicating that the file has been processed and saved
+    cat("Processed and saved:", new_file_name, "\n")
+  } else {
+    # Print a message if required columns are missing
+    cat("Skipping file (missing required columns):", file_name, "\n")
+  }
+}
+
+# Apply the process_file function to each CSV file in the list
+lapply(csv_files, process_file)
+
+#############################
+
+# Step 1: Set the working directory to where the Excel files are located
+setwd("C:/Users/lrmacha/Downloads/log/play")
+
+# Step 2: List all .xlsx files in the working directory that contain 'FDR' in their names
+xlsx_files <- list.files(pattern = "FDR.*\\.xlsx$", full.names = TRUE)
+
+# Define a function to read data from an .xlsx file
+read_fdr_file <- function(file_path) {
+  # Read the first sheet of the Excel file into a dataframe
+  df <- read_excel(file_path)
+  
+  # Return the dataframe along with the file name
+  list(df = df, file_name = basename(file_path))
+}
+
+# Apply the read_fdr_file function to each Excel file path
+file_data_list <- lapply(xlsx_files, read_fdr_file)
+
+# Combine data from each file into a single dataframe
+combined_list <- lapply(file_data_list, function(file_data) {
+  # Extract the dataframe and name the column after the file name (excluding extension)
+  data <- file_data$df
+  colname <- gsub("\\.xlsx$", "", file_data$file_name)  # Remove .xlsx extension to use as column name
+  colnames(data) <- colname
+  return(data)
+})
+
+# Combine all individual dataframes into a single dataframe
+combined <- bind_cols(combined_list)
+
+# Write the combined dataframe to a new Excel file
+write.xlsx(combined, file = "from_idep_graphpad.xlsx")
