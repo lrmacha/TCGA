@@ -1,0 +1,46 @@
+# Install graphviz if needed: pip install graphviz
+from graphviz import Digraph
+#####not ehad to download Graphviz download zip file into downloads folder, unzip it and place the working script in the bin file with the exe. files
+
+# Create a new directed graph
+dot = Digraph(comment='DMD Expression Model', format='jpeg')
+
+# Root node for DMD Expression
+dot.node('A', 'DMD Expression', shape='box', style='filled', fillcolor='lightblue', fontcolor='black', fontsize='14', penwidth='2')
+
+# Two branches: high and low DMD
+dot.node('B', 'High DMD Expression\n(KIRP, LGG, READ, THYM)', shape='ellipse', style='filled', fillcolor='lightgreen', fontcolor='black')
+dot.node('C', 'Low DMD Expression\n(BRCA, LAML, LUAD, PAAD, UVM)', shape='ellipse', style='filled', fillcolor='lightcoral', fontcolor='black')
+
+# Edges from the root to the two branches
+dot.edge('A', 'B', color='darkgreen', penwidth='2')
+dot.edge('A', 'C', color='darkred', penwidth='2')
+
+# High DMD branch details
+dot.node('F', 'Enhanced Calcium Signaling\n(Abnormal Ca++ signaling,\nmembrane receptor activity)', shape='box', style='filled', fillcolor='gold')
+dot.node('G', 'Aberrant Receptor Activation\n(Neuroactive ligand,\nGPCR signaling)', shape='box', style='filled', fillcolor='orange')
+dot.node('H', 'Enhanced Pro-survival\n& Proliferation\n(Signaling cascades)', shape='diamond', style='filled', fillcolor='lightyellow')
+
+dot.edge('B', 'F', color='darkgreen')
+dot.edge('B', 'G', color='darkgreen')
+dot.edge('F', 'H', color='darkblue')
+dot.edge('G', 'H', color='darkblue')
+
+# Low DMD branch details
+dot.node('I', 'Loss of Structural Integrity\n(Cell adhesion, ECM disruption)', shape='box', style='filled', fillcolor='pink')
+dot.node('J', 'Altered ECM & Inflammatory\nSignaling (Cytokine interactions,\nGPCR pathways)', shape='box', style='filled', fillcolor='purple')
+dot.node('K', 'Increased Invasion & Metastasis', shape='diamond', style='filled', fillcolor='lightgray')
+
+dot.edge('C', 'I', color='darkred')
+dot.edge('C', 'J', color='darkred')
+dot.edge('I', 'K', color='purple')
+dot.edge('J', 'K', color='purple')
+
+# Both branches converge on poor outcomes
+dot.node('L', 'Poor Survival Outcome', shape='ellipse', style='filled', fillcolor='red', fontcolor='white', fontsize='14', penwidth='2')
+
+dot.edge('H', 'L', color='black', penwidth='2')
+dot.edge('K', 'L', color='black', penwidth='2')
+
+# Render the diagram to a file and optionally view it
+dot.render('dmd_expression_model_colored', view=True)
