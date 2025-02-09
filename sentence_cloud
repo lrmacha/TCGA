@@ -1,0 +1,45 @@
+ad required libraries
+library(ggwordcloud)
+library(readxl)
+library(ggplot2)
+library(dplyr)
+
+# Load data from an Excel file
+# Assume the sentences are in the first column, named 'Sentences'
+file_path <- "C:/Users/lrmacha/Downloads/words.xlsx"
+data <- read_excel(file_path, col_names = FALSE)  # Don't use the first row as headers
+
+# Now manually set the column name to "Term"
+colnames(data) <- c("Term")
+
+
+# Compute frequencies of unique GO terms
+data <- data %>%
+  group_by(Term) %>%
+  summarise(Frequency = n()) %>% 
+  arrange(desc(Frequency))
+
+data <- data %>% filter(!is.na(Term))
+
+# Filter out low-frequency terms
+data <- data %>%
+  filter(Frequency > 1)  # Keep terms with Frequency greater than 1
+
+
+
+
+# View the updated data
+print(data)
+
+# Generate the sentence cloud
+ggplot(data, aes(label = Term, size = Frequency, color = Frequency)) +
+  geom_text_wordcloud_area() +
+  scale_size_area(max_size = 20) +
+  scale_color_gradient(low = "steelblue", high = "darkred") +
+  theme_minimal()
+
+# Load the package
+library(writexl)
+
+# Write the data to an Excel file
+write_xlsx(data, "C:/Users/lrmacha/Downloads/word_cloud_data_output_red_low_bad.xlsx")
