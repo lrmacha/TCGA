@@ -1,0 +1,222 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.feature_selection import mutual_info_classif, f_classif, chi2
+from sklearn.preprocessing import MinMaxScaler
+import requests
+
+# Step 1: Load the data
+def load_gene_data(file_path):
+    """Loads gene data from a CSV file."""
+    df = pd.read_csv(file_path, header=None)  # Read file without assuming any header
+    print("Original Data Shape (Genes x Patients):", df.shape)  # Debugging: Check original shape
+    return df
+
+# Replace with your file path
+file_path = r"C:\Users\lrmacha\Downloads\foridep_OS.csv"
+df = load_gene_data(file_path)
+
+# Step 2: Transpose the data to have genes as rows and patients as columns
+df = df.T  # Transpose the data
+df.columns = [f"Gene_{i}" for i in range(1, df.shape[1] + 1)]  # Add generic headers for genes if not present
+print("Data Shape After Transposing (Patients x Genes):", df.shape)  # Debugging: Check new shape after transpose
+
+# Step 3: Separate the gene identifiers (first row), which should not be used in calculations
+gene_identifiers = df.iloc[0].values  # Get the first row containing gene identifiers
+df_numeric = df.iloc[1:].apply(pd.to_numeric, errors='coerce')  # Convert the rest to numeric
+
+# Step 4: Preprocessing Function (Exclude first row with gene identifiers)
+def preprocess_data(df_numeric):
+    """Handles missing values and performs min-max normalization."""
+    df_cleaned = df_numeric.dropna(axis=1)  # Drop genes with missing values (NaN) in patients' data
+    print("Data Shape After Dropping Missing Values:", df_cleaned.shape)  # Debugging: Check shape after dropping NaNs
+    min_vals = df_cleaned.min(axis=0)  # Min across patients (columns)
+    max_vals = df_cleaned.max(axis=0)  # Max across patients (columns)
+    df_normalized = (df_cleaned - min_vals) / (max_vals - min_vals)  # Normalize between 0 and 1
+    return df_normalized
+
+# Process the numeric data (excluding the first row with gene identifiers)
+df_processed = preprocess_data(df_numeric)
+df_processed = df_processed.fillna(0)  # Replace NaN with 0
+print("NaN values in processed data:", df_processed.isna().sum().sum())  # Check if there are any NaNs
+
+# Step 5: Feature Selection (Voting-based)
+def vote_step(ds, labels):
+    """Ranks genes using MI, F-Classif, and Chi-Square."""
+    def step_function(scores):
+        return max(scores) * 0.3
+
+    SMI, FClassif, ChiSquared = {}, {}, {}
+
+    # Mutual Information
+    mi_scores = mutual_info_classif(ds, labels)
+    SF = step_function(mi_scores)
+    for i, score in enumerate(mi_scores):
+        if score >= SF:
+            SMI[ds.columns[i]] = score
+
+    # F-Classif
+    f_scores, _ = f_classif(ds, labels)
+    SF = step_function(f_scores)
+    for i, score in enumerate(f_scores):
+        if score >= SF:
+            FClassif[ds.columns[i]] = score
+
+    # Chi-Square
+    ds_scaled = MinMaxScaler().fit_transform(ds)
+    chi_scores, _ = chi2(ds_scaled, labels)
+    SF = step_function(chi_scores)
+    for i, score in enumerate(chi_scores):
+        if score >= SF:
+            ChiSquared[ds.columns[i]] = score
+
+    result_df = pd.DataFrame({
+        "Gene": ds.columns,
+        "Mutual_Information": [SMI.get(gene, 0) for gene in ds.columns],
+        "F_Classif": [FClassif.get(gene, 0) for gene in ds.columns],
+        "Chi_Squared": [ChiSquared.get(gene, 0) for gene in ds.columns]
+    })
+
+    return result_df
+
+# Example labels for the target variable (patients' outcomes)
+np.random.seed(42)  # Set a fixed seed value for reproducibility
+labels = np.random.choice([0, 1], size=df_processed.shape[0])  # Placeholder, replace with actual labels
+df_scores = vote_step(df_processed, labels)
+
+# Step 6: Fuzzy Gene Selection
+def fuzzy_gene_selection(mi_scores, f_scores, chi_scores, genes, gene_identifiers):
+    """Selects significant genes using a fuzzy approach and returns Ensembl Gene IDs."""
+    def compute_mf(scores):
+        a, b = min(scores), max(scores)
+        return [(x - a) / (b - a) if b != a else 0 for x in scores]
+
+    MF1 = compute_mf(mi_scores)
+    MF2 = compute_mf(f_scores)
+    MF3 = compute_mf(chi_scores)
+
+    N = 3
+    ASG = [(MF1[i] + MF2[i] + MF3[i]) / N for i in range(len(genes))]
+    SF_threshold = max(ASG) * 0.5
+    significant_gene_indices = [i for i in range(len(genes)) if ASG[i] >= SF_threshold]
+
+    # Convert significant gene indices to actual Ensembl Gene IDs
+    significant_genes = [gene_identifiers[i] for i in significant_gene_indices]
+
+    return significant_genes
+
+
+significant_genes = fuzzy_gene_selection(
+    df_scores["Mutual_Information"], 
+    df_scores["F_Classif"], 
+    df_scores["Chi_Squared"], 
+    df_scores["Gene"],
+    gene_identifiers  # Pass gene_identifiers to the function
+)
+
+# Convert the Ensembl IDs to gene names
+def convert_ensembl_to_gene_names(ensembl_ids):
+    """Converts Ensembl Gene IDs to Gene Names using Ensembl REST API."""
+    gene_names = []
+    for ensembl_id in ensembl_ids:
+        url = f"https://rest.ensembl.org/lookup/id/{ensembl_id}?content-type=application/json"
+        response = requests.get(url)
+        
+        if response.status_code == 200:
+            data = response.json()
+            gene_name = data.get("display_name", "Unknown Gene Name")
+            gene_names.append(gene_name)
+        else:
+            gene_names.append("Gene not found")
+    
+    return gene_names
+
+significant_gene_names = convert_ensembl_to_gene_names(significant_genes)
+
+# Output the significant genes and their names
+print("Significant Genes and Corresponding Gene Names:")
+for ensembl_id, gene_name in zip(significant_genes, significant_gene_names):
+    print(f"{ensembl_id}: {gene_name}")
+
+
+
+
+# # Plot the feature selection scores
+# plt.figure(figsize=(10, 6))
+# x_labels = df_scores["Gene"]
+
+# plt.plot(x_labels, df_scores["Mutual_Information"], marker='o', label="Mutual Information", linestyle="dashed")
+# plt.plot(x_labels, df_scores["F_Classif"], marker='s', label="F-Classif", linestyle="dashed")
+# plt.plot(x_labels, df_scores["Chi_Squared"], marker='^', label="Chi-Squared", linestyle="dashed")
+
+# plt.axhline(y=max(df_scores["Mutual_Information"]) * 0.3, color='r', linestyle='--', label="Threshold (Step Function)")
+
+# plt.xlabel("Genes")
+# plt.ylabel("Feature Selection Score")
+# plt.xticks(rotation=45, ha='right')
+# plt.legend()
+# plt.title("Feature Selection Scores for Genes")
+# plt.grid()
+# plt.show()
+
+# # Plot the Aggregated Score for Genes (ASG)
+# asg_scores = [(df_scores["Mutual_Information"][i] +
+#                df_scores["F_Classif"][i] +
+#                df_scores["Chi_Squared"][i]) / 3 for i in range(len(df_scores))]
+
+# plt.figure(figsize=(10, 6))
+# plt.bar(x_labels, asg_scores, color=['green' if gene in significant_genes else 'gray' for gene in x_labels])
+# plt.axhline(y=max(asg_scores) * 0.5, color='r', linestyle='--', label="ASG Threshold")
+
+# plt.xlabel("Genes")
+# plt.ylabel("Aggregated Score for Genes (ASG)")
+# plt.xticks(rotation=45, ha='right')
+# plt.title("Fuzzy Gene Selection - Aggregated Scores")
+# plt.legend()
+# plt.grid()
+# plt.show()
+
+
+# #####Seaborn for aggregate score
+
+# import seaborn as sns
+
+# # Step 7: Plot Aggregated Score for Genes (ASG) using Seaborn
+
+# # Calculate the aggregated score (ASG) for each gene
+# asg_scores = [(df_scores["Mutual_Information"][i] +
+#                df_scores["F_Classif"][i] +
+#                df_scores["Chi_Squared"][i]) / 3 for i in range(len(df_scores))]
+
+# # Create a DataFrame for plotting
+# asg_df = pd.DataFrame({
+#     'Gene': df_scores["Gene"],  # Genes
+#     'Aggregated_Score': asg_scores  # Corresponding aggregated score
+# })
+
+# # Create a Seaborn bar plot
+# plt.figure(figsize=(10, 6))
+# sns.barplot(x='Gene', y='Aggregated_Score', data=asg_df, color='blue')
+
+# # Add a horizontal line for the ASG threshold (50% of the maximum ASG)
+# threshold = max(asg_scores) * 0.5
+# plt.axhline(y=threshold, color='r', linestyle='--', label="Threshold (ASG)")
+
+# # Rotate x-axis labels for better readability
+# plt.xticks(rotation=45, ha='right')
+
+# # Add labels and title
+# plt.xlabel("Genes")
+# plt.ylabel("Aggregated Score (ASG)")
+# plt.title("Gene vs Aggregated Score (ASG)")
+
+# # Add legend and grid
+# plt.legend()
+# plt.grid(True)
+
+# # Show the plot
+# plt.tight_layout()
+# plt.show()
+
+
+
