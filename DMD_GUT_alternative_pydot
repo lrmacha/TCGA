@@ -1,0 +1,54 @@
+import pydot
+
+# Create a graph
+graph = pydot.Dot(graph_type="digraph", rankdir="LR")
+
+# Add the central node for DMD Expression
+graph.add_node(pydot.Node("DMD", label="DMD Expression", shape="ellipse", style="filled", color="lightblue"))
+
+# Add nodes and edges for High DMD Expression
+graph.add_node(pydot.Node("High", label="High DMD Expression", shape="box", style="filled", color="lightgreen"))
+graph.add_edge(pydot.Edge("DMD", "High"))
+
+# Add tumor types under High DMD Expression
+high_tumors = ["KIRP", "LGG", "READ", "THYM"]
+for tumor in high_tumors:
+    graph.add_node(pydot.Node(tumor, label=tumor, shape="ellipse"))
+    graph.add_edge(pydot.Edge("High", tumor))
+
+# Add pathways and outcomes for High DMD Expression
+graph.add_node(pydot.Node("Calcium", label="Enhanced Calcium Signaling", shape="box"))
+graph.add_node(pydot.Node("PoorOutcome", label="Poor Outcome", shape="box", style="filled", color="salmon"))
+graph.add_edge(pydot.Edge("High", "Calcium"))
+graph.add_edge(pydot.Edge("Calcium", "PoorOutcome"))
+
+# Add nodes and edges for Low DMD Expression
+graph.add_node(pydot.Node("Low", label="Low DMD Expression", shape="box", style="filled", color="orange"))
+graph.add_edge(pydot.Edge("DMD", "Low"))
+
+# Add tumor types under Low DMD Expression
+low_tumors = ["BRCA", "LUAD", "STAD", "UCEC"]
+for tumor in low_tumors:
+    graph.add_node(pydot.Node(tumor, label=tumor, shape="ellipse"))
+    graph.add_edge(pydot.Edge("Low", tumor))
+
+# Add pathways and outcomes for Low DMD Expression
+graph.add_node(pydot.Node("ECM", label="Loss of Structural Integrity", shape="box"))
+graph.add_node(pydot.Node("Metastasis", label="Increased Metastasis", shape="box", style="filled", color="salmon"))
+graph.add_edge(pydot.Edge("Low", "ECM"))
+graph.add_edge(pydot.Edge("ECM", "Metastasis"))
+
+# Add GO/KEGG terms as annotations
+graph.add_node(pydot.Node("GO1", label="GO:0005509 (Calcium Ion Binding)", shape="plaintext", fontsize="10"))
+graph.add_node(pydot.Node("KEGG1", label="KEGG:04020 (Calcium Signaling Pathway)", shape="plaintext", fontsize="10"))
+graph.add_edge(pydot.Edge("Calcium", "GO1", style="dashed"))
+graph.add_edge(pydot.Edge("Calcium", "KEGG1", style="dashed"))
+
+graph.add_node(pydot.Node("GO2", label="GO:0031012 (Extracellular Matrix)", shape="plaintext", fontsize="10"))
+graph.add_node(pydot.Node("KEGG2", label="KEGG:04512 (ECM-Receptor Interaction)", shape="plaintext", fontsize="10"))
+graph.add_edge(pydot.Edge("ECM", "GO2", style="dashed"))
+graph.add_edge(pydot.Edge("ECM", "KEGG2", style="dashed"))
+
+# Save the graph to a JPEG file
+graph.write("dmd_expression_model.jpeg", format="jpeg")  # Save the graph as a JPEG
+print("Diagram saved as dmd_expression_model.jpeg")
