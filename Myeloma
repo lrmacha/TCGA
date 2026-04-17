@@ -225,11 +225,6 @@ cp4$LGALS3 = gsub('0','low', cp4$LGALS3)
 cp4$LGALS3 = gsub('1','high', cp4$LGALS3)
 
 
-###pretty plotting method
-ggsurvplot(
-  fit = survfit(Surv(time, cens) ~ LGALS3, data = cp4), 
-  xlab = "Survival time in days", 
-  ylab = "Overall survival probability")
 
 ###########################
 #super fancy plotting method (adjust xlim value as needed)
@@ -276,10 +271,78 @@ coxph(Surv(time, cens) ~ LGALS3, data = cp4) %>%
 ################################
 
 
+# Statistics section ------------------------------------------------------
 
+# Fit models
+median_fit <- survfit(Surv(time, cens) ~ LGALS3, data = cp4)
+surv_diff <- survdiff(Surv(time, cens) ~ LGALS3, data = cp4)
+logrank_p <- 1 - pchisq(surv_diff$chisq, length(surv_diff$n) - 1)
+cox_model <- coxph(Surv(time, cens) ~ LGALS3, data = cp4)
 
+# Optional formatted hazard ratio table
+hr_table <- cox_model %>%
+  gtsummary::tbl_regression(exp = TRUE)
 
+# Output PDF file
+pdf("D:/GDC_Myeloma/LGALS3_survival_summary.pdf", width = 8.27, height = 11.69)
 
+# Helper function to print text onto a PDF page
+write_page <- function(title, text_lines, cex_text = 0.8) {
+  plot.new()
+  title(main = title, line = -2, cex.main = 1.2)
+  text(
+    x = 0.02, y = 0.98,
+    labels = paste(text_lines, collapse = "\n"),
+    adj = c(0, 1),
+    family = "mono",
+    cex = cex_text
+  )
+}
 
+# Page 1: Median survival
+write_page(
+  "Median survival",
+  capture.output(print(median_fit))
+)
+
+# Page 2: Log-rank test
+write_page(
+  "Log-rank comparison",
+  c(
+    capture.output(print(surv_diff)),
+    "",
+    paste("Calculated log-rank p-value:", signif(logrank_p, 4))
+  )
+)
+
+# Page 3: Cox regression
+write_page(
+  "Univariate Cox regression",
+  capture.output(summary(cox_model))
+)
+
+# Page 4: Hazard ratio table
+write_page(
+  "Hazard ratio table",
+  capture.output(print(hr_table)),
+  cex_text = 0.75
+)
+
+dev.off()
+
+if (!requireNamespace("gtsummary", quietly = TRUE)) install.packages("gtsummary")
+if (!requireNamespace("gt", quietly = TRUE)) install.packages("gt")
+if (!requireNamespace("webshot2", quietly = TRUE)) install.packages("webshot2")
+
+library(gtsummary)
+library(gt)
+
+# Make the regression table
+hr_table <- cox_model %>%
+  gtsummary::tbl_regression(exp = TRUE)
+
+# Convert to gt and save as PDF
+gtsummary::as_gt(hr_table) %>%
+  gt::gtsave("D:/GDC_Myeloma/LGALS3_hazard_ratio_table.pdf")
 
 
