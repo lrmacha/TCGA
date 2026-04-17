@@ -175,16 +175,32 @@ library("survival")
 
 ###Tanya = (na.omit(cutpointdf3)) # removes an rows with NA
 
-#This splits data into high and low expressing groups using survival data. There are different optional methods for 
-dichot <- maxstat.test(Surv(time, cens) ~ MGE,
-                       data=cutpointdf3, smethod="LogRank",
-                       pmethod="condMC", B = 9999)
+# This splits data into high and low expressing groups using survival data
+dichot <- maxstat.test(
+  Surv(time, cens) ~ MGE,
+  data = cutpointdf3,
+  smethod = "LogRank",
+  pmethod = "condMC",
+  B = 9999
+)
 
-print(dichot) # this prints the cutpoint value, p-value etc
+print(dichot)  # prints the cutpoint value, p-value etc
 
-plot(dichot, xlab="mean gene expression") # This plots a cutpoint graph 
+# Store cutpoint value
+cutpoint_value <- dichot$estimate
+cutpoint_value <- dichot$estimate
 
+plot(dichot, xlab = "Mean gene expression")
+abline(v = cutpoint_value, col = "red", lty = 2, lwd = 2)
 
+usr <- par("usr")
+text(
+  x = cutpoint_value + 0.02 * (usr[2] - usr[1]),
+  y = usr[4] - 0.1 * (usr[4] - usr[3]),
+  labels = paste("Cutpoint =", round(cutpoint_value, 3)),
+  col = "red",
+  adj = 0
+)
 
 
 ###################################################
